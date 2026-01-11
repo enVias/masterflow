@@ -779,12 +779,16 @@
                         throw new Error(status.error || 'Processing failed');
                     } else {
                         // Update progress
-                        const progressMatch = status.progress.match(/\d+/);
-                        if (progressMatch) {
-                            const pct = Math.min(30 + parseInt(progressMatch[0]) * 0.6, 90);
-                            progressBar.style.width = `${pct}%`;
+                        if (status.progress) {
+                            const progressMatch = status.progress.match(/\d+/);
+                            if (progressMatch) {
+                                const pct = Math.min(30 + parseInt(progressMatch[0]) * 0.6, 90);
+                                progressBar.style.width = `${pct}%`;
+                            }
+                            progressText.textContent = status.progress;
+                        } else {
+                            progressText.textContent = 'Processing...';
                         }
-                        progressText.textContent = status.progress || 'Processing...';
                     }
                 }
             } catch (error) {
