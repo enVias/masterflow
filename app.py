@@ -1,13 +1,13 @@
 import os
 import uuid
-import matchering as mg
-from flask import Flask, render_template, request, jsonify, send_file, url_for
+import traceback
+from flask import Flask, render_template, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 import threading
 import time
 
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 200MB max
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max (reduced for memory)
 app.config['UPLOAD_FOLDER'] = '/tmp/uploads'
 app.config['PROCESSED_FOLDER'] = '/tmp/processed'
 
@@ -27,14 +27,14 @@ def process_audio(job_id, target_path, reference_path, output_path):
     """Process audio in background thread"""
     try:
         jobs[job_id]['status'] = 'processing'
+        jobs[job_id]['progress'] = 'Loading Matchering...'
+        
+        # Import matchering here to avoid loading on startup
+        import matchering as mg
+        
         jobs[job_id]['progress'] = 'Analyzing tracks...'
         
-        # Set up logging to capture progress
-        def log_handler(msg):
-            jobs[job_id]['progress'] = msg
-        
-        mg.log(log_handler)
-        
+        # Configure matchering for lower memory usage
         mg.process(
             target=target_path,
             reference=reference_path,
@@ -49,20 +49,43 @@ def process_audio(job_id, target_path, reference_path, output_path):
         jobs[job_id]['output_16bit'] = output_path.replace('.wav', '_16bit.wav')
         jobs[job_id]['output_24bit'] = output_path.replace('.wav', '_24bit.wav')
         
+    except MemoryError:
+        jobs[job_id]['status'] = 'error'
+        jobs[job_id]['error'] = 'Out of memory. Please try shorter audio files (under 3 minutes) or lower quality files.'
     except Exception as e:
         jobs[job_id]['status'] = 'error'
-        jobs[job_id]['error'] = str(e)
+        error_msg = str(e)
+        # Provide user-friendly error messages
+        if 'ffmpeg' in error_msg.lower():
+            jobs[job_id]['error'] = 'Audio conversion error. Please try a different file format (WAV recommended).'
+        elif 'sample rate' in error_msg.lower():
+            jobs[job_id]['error'] = 'Sample rate mismatch. Please ensure both files have compatible sample rates.'
+        elif 'mono' in error_msg.lower() or 'stereo' in error_msg.lower() or 'channel' in error_msg.lower():
+            jobs[job_id]['error'] = 'Channel mismatch. Please use stereo audio files for both target and reference.'
+        elif 'empty' in error_msg.lower() or 'silent' in error_msg.lower():
+            jobs[job_id]['error'] = 'One of the audio files appears to be empty or silent.'
+        else:
+            jobs[job_id]['error'] = f'Mastering failed: {error_msg}'
+        
+        # Log full traceback for debugging
+        print(f"Job {job_id} error: {traceback.format_exc()}")
     finally:
         # Cleanup uploaded files
-        try:
-            os.remove(target_path)
-            os.remove(reference_path)
-        except:
-            pass
+        for path in [target_path, reference_path]:
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except:
+                pass
 
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/health')
+def health():
+    """Health check endpoint"""
+    return jsonify({'status': 'ok'})
 
 @app.route('/upload', methods=['POST'])
 def upload():
@@ -91,6 +114,15 @@ def upload():
     
     target.save(target_path)
     reference.save(reference_path)
+    
+    # Check file sizes
+    target_size = os.path.getsize(target_path)
+    reference_size = os.path.getsize(reference_path)
+    
+    if target_size > 50 * 1024 * 1024 or reference_size > 50 * 1024 * 1024:
+        os.remove(target_path)
+        os.remove(reference_path)
+        return jsonify({'error': 'Files too large. Please use files under 50MB each.'}), 400
     
     # Initialize job
     jobs[job_id] = {
@@ -142,11 +174,11 @@ def download(job_id, bit_depth):
 # Cleanup old jobs periodically
 def cleanup_old_jobs():
     while True:
-        time.sleep(3600)  # Run every hour
+        time.sleep(1800)  # Run every 30 minutes
         current_time = time.time()
         jobs_to_remove = []
-        for job_id, job in jobs.items():
-            if current_time - job.get('created', 0) > 86400:  # 24 hours
+        for job_id, job in list(jobs.items()):
+            if current_time - job.get('created', 0) > 7200:  # 2 hours
                 jobs_to_remove.append(job_id)
                 # Remove output files
                 for key in ['output_16bit', 'output_24bit']:
