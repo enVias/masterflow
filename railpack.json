@@ -1,8 +1,0 @@
-{
-  "$schema": "https://schema.railpack.com",
-  "buildAptPackages": ["libsndfile1-dev"],
-  "deploy": {
-    "aptPackages": ["libsndfile1", "ffmpeg"],
-    "startCommand": "gunicorn app:app --bind 0.0.0.0:$PORT --timeout 600 --workers 2"
-  }
-}
