@@ -1,8 +1,5 @@
 [phases.setup]
-nixPkgs = ["libsndfile", "ffmpeg", "gcc", "pkg-config", "openblas", "lapack"]
-
-[phases.install]
-cmds = ["pip install --upgrade pip", "pip install numpy scipy", "pip install -r requirements.txt"]
+nixPkgs = ["libsndfile", "ffmpeg-full"]
 
 [start]
 cmd = "gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 600"
