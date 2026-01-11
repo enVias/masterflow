@@ -1,5 +1,4 @@
-flask==3.0.0
-gunicorn==21.2.0
-matchering==2.0.6
-numpy<2.0.0
-werkzeug==3.0.1
+flask
+gunicorn
+matchering
+werkzeug
