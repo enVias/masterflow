@@ -7,7 +7,7 @@ import threading
 import time
 
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max (reduced for memory)
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max
 app.config['UPLOAD_FOLDER'] = '/tmp/uploads'
 app.config['PROCESSED_FOLDER'] = '/tmp/processed'
 
@@ -34,7 +34,6 @@ def process_audio(job_id, target_path, reference_path, output_path):
         
         jobs[job_id]['progress'] = 'Analyzing tracks...'
         
-        # Configure matchering for lower memory usage
         mg.process(
             target=target_path,
             reference=reference_path,
@@ -51,7 +50,7 @@ def process_audio(job_id, target_path, reference_path, output_path):
         
     except MemoryError:
         jobs[job_id]['status'] = 'error'
-        jobs[job_id]['error'] = 'Out of memory. Please try shorter audio files (under 3 minutes) or lower quality files.'
+        jobs[job_id]['error'] = 'Out of memory. Please try shorter audio files.'
     except Exception as e:
         jobs[job_id]['status'] = 'error'
         error_msg = str(e)
@@ -114,15 +113,6 @@ def upload():
     
     target.save(target_path)
     reference.save(reference_path)
-    
-    # Check file sizes
-    target_size = os.path.getsize(target_path)
-    reference_size = os.path.getsize(reference_path)
-    
-    if target_size > 50 * 1024 * 1024 or reference_size > 50 * 1024 * 1024:
-        os.remove(target_path)
-        os.remove(reference_path)
-        return jsonify({'error': 'Files too large. Please use files under 50MB each.'}), 400
     
     # Initialize job
     jobs[job_id] = {
